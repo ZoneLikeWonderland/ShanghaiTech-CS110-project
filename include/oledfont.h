@@ -6,8 +6,8 @@
 // offset 32
 // size: 12 * 6
 typedef unsigned char u8;
-typedef unsigned int u16;
-typedef unsigned long u32;
+typedef unsigned short u16;
+typedef unsigned int u32;    			
 
 /*************************************6 * 8 dot matrixÜ********************************/
 

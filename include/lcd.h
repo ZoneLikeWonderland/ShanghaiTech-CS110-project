@@ -17,8 +17,8 @@
 #endif
 
 typedef unsigned char u8;
-typedef unsigned int u16;
-typedef unsigned long u32;    			
+typedef unsigned short u16;
+typedef unsigned int u32;    			
 
 
 // #define LED_ON gpio_bit_reset(GPIOC,GPIO_PIN_13)
