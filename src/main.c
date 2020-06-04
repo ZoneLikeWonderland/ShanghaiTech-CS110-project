@@ -81,17 +81,21 @@ typedef struct {
     int vx;
     int vy;
     int tag;
-} Pos;
+} GameObject;
 
 void draw_init() {
     for (int i = 0; i < 400; i++) ((int *)need_clear)[i] = 0xffffffff;
     for (int i = 0; i < 400; i++) ((int *)is_painted)[i] = 0;
+    for (int i = 0; i < 15; i++) {
+        ((int *)need_clear)[i * 160 / 8 / 4] = 0xc0000000;
+        ((int *)is_painted)[i * 160 / 8 / 4] = 0x3fffffff;
+    }
 }
 
 int xy2block[16][8];
 const int weapon_offset = 4;
 
-void clean_last_character(Pos pos) {
+void clean_last_character(GameObject pos) {
     for (int i = 0; i < 20 + weapon_offset; i++) {
         if (i + pos.last_y_character_backup < 80)
             for (int j = 0; j < 20; j++) {
@@ -106,7 +110,7 @@ void clean_last_character(Pos pos) {
     }
 }
 
-void draw_weapon(Pos pos, int weapon_id, int pose) {
+void draw_weapon(GameObject pos, int weapon_id, int pose) {
     int x = pos.xpos / denom;
     int y = pos.ypos / denom + weapon_offset;
     if (pose % 2) {
@@ -140,14 +144,14 @@ void draw_weapon(Pos pos, int weapon_id, int pose) {
     }
 }
 
-Pos pos_info[2];
+GameObject player[2];
 int camp2hero[2] = {0, 1};
 
 int get_pose_from_target(int my_camp_id) {
-    int tan1000 = (pos_info[my_camp_id].ypos - pos_info[my_camp_id ^ 1].ypos) *
+    int tan1000 = (player[my_camp_id].ypos - player[my_camp_id ^ 1].ypos) *
                   1000 /
-                  (pos_info[my_camp_id ^ 1].xpos - pos_info[my_camp_id].xpos);
-    int right = pos_info[my_camp_id ^ 1].xpos > pos_info[my_camp_id].xpos;
+                  (player[my_camp_id ^ 1].xpos - player[my_camp_id].xpos);
+    int right = player[my_camp_id ^ 1].xpos > player[my_camp_id].xpos;
     if (right) {
         if (tan1000 > 1376) return 2 * 2;
         if (tan1000 > 325) return 1 * 2;
@@ -164,11 +168,14 @@ int get_pose_from_target(int my_camp_id) {
 }
 
 void draw_character(int my_camp_id) {
-    draw_weapon(pos_info[my_camp_id], 0, get_pose_from_target(my_camp_id));
-    Pos *pos = &pos_info[my_camp_id];
+    GameObject *pos = &player[my_camp_id];
+    u16(*player_model)[20] = character[camp2hero[my_camp_id]];
+    if (pos->tag >> 16)
+        draw_weapon(player[my_camp_id], 0, get_pose_from_target(my_camp_id));
+    else
+        player_model = character_dead[camp2hero[my_camp_id]];
     int x = pos->xpos / denom;
     int y = pos->ypos / denom;
-    u16(*player_model)[20] = character[camp2hero[my_camp_id]];
     pos->last_x_character_backup = pos->last_x_character;
     pos->last_y_character_backup = pos->last_y_character;
     if (x > pos->last_x_character) pos->right_face = 1;
@@ -218,16 +225,18 @@ int get_fps() {
     return (frame - start_frame) * 1000 / (current_ms - start_ms);
 }
 
-void init_pos(Pos *p) {
-    p->xpos = 80 * denom;
-    p->ypos = 40 * denom;
-    p->last_x_character = 80;
-    p->last_x_character = 40;
+void init_player(GameObject *p, int x, int y) {
+    p->xpos = x * denom;
+    p->ypos = y * denom;
+    p->last_x_character = x;
+    p->last_x_character = y;
     p->vx = 0;
     p->vy = 0;
+    p->tag = (20 << 16) + (20 << 8) + 20;
 }
 
-void update_pos(Pos *p, int next_x_offset, int next_y_offset, int speed) {
+void update_pos(GameObject *p, int next_x_offset, int next_y_offset,
+                int speed) {
 
     p->xpos += next_x_offset * speed;
     p->ypos += next_y_offset * speed;
@@ -250,19 +259,33 @@ void init_map() {
 }
 
 void random_walk(int camp_id) {
-    pos_info[camp_id].vx += rand() % 19 - 9;
-    pos_info[camp_id].vy += rand() % 19 - 9;
-    update_pos(&pos_info[camp_id], pos_info[camp_id].vx, pos_info[camp_id].vy,
-               1);
-    if (pos_info[camp_id].xpos <= border_x1 * denom) pos_info[camp_id].vx = 0;
-    if (pos_info[camp_id].xpos >= border_x2 * denom) pos_info[camp_id].vx = 0;
-    if (pos_info[camp_id].ypos <= border_y1 * denom) pos_info[camp_id].vy = 0;
-    if (pos_info[camp_id].ypos >= border_y2 * denom) pos_info[camp_id].vy = 0;
+    player[camp_id].vx += rand() % 19 - 9;
+    player[camp_id].vy += rand() % 19 - 9;
+    update_pos(&player[camp_id], player[camp_id].vx, player[camp_id].vy, 1);
+    if (player[camp_id].xpos <= border_x1 * denom) player[camp_id].vx = 0;
+    if (player[camp_id].xpos >= border_x2 * denom) player[camp_id].vx = 0;
+    if (player[camp_id].ypos <= border_y1 * denom) player[camp_id].vy = 0;
+    if (player[camp_id].ypos >= border_y2 * denom) player[camp_id].vy = 0;
 }
 
 #define queue_size 10
-Pos bullet_queue[queue_size + 1];
+GameObject bullet_queue[queue_size + 1];
 int begin = 0, end = 0;
+
+int bullet_damage[2] = {5, 5};
+
+void deal_damage(int target_player, int bullet_type) {
+    int hp = player[target_player].tag >> 16;
+    int shield = (player[target_player].tag >> 8) & 0xff;
+    int mana = player[target_player].tag & 0xff;
+    shield -= bullet_damage[bullet_type];
+    if (shield < 0) {
+        hp += shield;
+        shield = 0;
+    }
+    if (hp < 0) hp = 0;
+    player[target_player].tag = (hp << 16) + (shield << 8) + mana;
+}
 
 void render_bullet() {
     while (begin != end && bullet_queue[begin % queue_size].right_face == 0) {
@@ -283,12 +306,14 @@ void render_bullet() {
         int bullet_center_y = y + 5;
 
         for (int i = 0; i < 2; i++) {
-            int character_center_x = pos_info[i].xpos / denom + 10;
-            int character_center_y = pos_info[i].ypos / denom + 10;
-            if (abs(bullet_center_x - character_center_x) <= 5 &&
+            int character_center_x = player[i].xpos / denom + 10;
+            int character_center_y = player[i].ypos / denom + 10;
+            if (bullet_queue[k].right_face == -1 &&
+                abs(bullet_center_x - character_center_x) <= 5 &&
                 abs(bullet_center_y - character_center_y) <= 5) {
                 bullet_queue[k].vx = bullet_queue[k].vy = 0;
                 bullet_queue[k].right_face = 30;
+                deal_damage(i, bullet_queue[k].tag);
             }
         }
 
@@ -343,7 +368,7 @@ void render_bullet() {
 void clean_last_bullet() {
     for (int k = begin % queue_size; k != end % queue_size;
          k = (k + 1) % queue_size) {
-        Pos pos = bullet_queue[k];
+        GameObject pos = bullet_queue[k];
         if (bullet_queue[k].vx || bullet_queue[k].vy)
             for (int i = 0; i < 10; i++) {
                 for (int j = 0; j < 10; j++) {
@@ -387,9 +412,15 @@ void bullet_push(int x, int y, int vx, int vy, int type) {
         bullet_queue[end % queue_size].last_y_character_backup = y / denom;
     bullet_queue[end % queue_size].vx = vx;
     bullet_queue[end % queue_size].vy = vy;
-    bullet_queue[end % queue_size].right_face = 1;
+    bullet_queue[end % queue_size].right_face = -1;
     bullet_queue[end % queue_size].tag = type;
     end++;
+}
+
+void init_panel() {
+    LCD_Address_Set(0, 0, 29, 14);
+    for (int i = 0; i < 15; i++)
+        for (int j = 0; j < 30; j++) LCD_WR_DATA(panel[i][j]);
 }
 
 #define START (button & (1 << 0))
@@ -402,12 +433,14 @@ void bullet_push(int x, int y, int vx, int vy, int type) {
 void try_fire(int camp_id) {
 
     int pose = get_pose_from_target(camp_id);
-    bullet_push(pos_info[camp_id].xpos + (10 / 2 + pose2xy[pose][0]) * denom,
-                pos_info[camp_id].ypos +
+    bullet_push(player[camp_id].xpos + (10 / 2 + pose2xy[pose][0]) * denom,
+                player[camp_id].ypos +
                     (weapon_offset + 10 / 2 - 1 + pose2xy[pose][1]) * denom,
                 pose2xy[pose][0] * 10 + rand() % 39 - 19,
                 pose2xy[pose][1] * 10 + rand() % 39 - 19, camp_id);
 }
+
+int Get_BOOT0(void) { return (int)(gpio_input_bit_get(GPIOA, GPIO_PIN_8)); }
 
 int main(void) {
     srand(get_timer_value());
@@ -416,6 +449,7 @@ int main(void) {
     // LCD_Clear(BG);
     // LCD_ShowNum(0, 32, sizeof(blocks), 10, WHITE);
     init_map();
+    init_panel();
     /* enable the global interrupt */
     eclic_global_interrupt_enable();
     eclic_priority_group_set(ECLIC_PRIGROUP_LEVEL3_PRIO1);
@@ -429,8 +463,8 @@ int main(void) {
     // hw_time_set(0);
     // LCD_Address_Set(40, 40, 59, 59);
 
-    init_pos(&pos_info[0]);
-    init_pos(&pos_info[1]);
+    init_player(&player[0], 40, 40);
+    init_player(&player[1], 120, 40);
 
     // int count = 0;
     int last_x_offset = 0;
@@ -438,41 +472,55 @@ int main(void) {
     while (1) {
         frame++;
 
-        {
-            u8 stick = input_data.byte[6];
-            u8 button = input_data.byte[5];
-
-            u8 angle = stick >> 3;
-
-            // LCD_ShowNum(40, 0, begin, 2, WHITE);
-            // LCD_ShowNum(80, 0, end, 2, WHITE);
-            // LCD_ShowNum(0, 32, count++, 5, WHITE);
-            if (angle >= 0 && angle <= 23) {
-
-                int speed = stick & 0b111;
-                int next_x_offset = rhor2xy[angle][0];
-                int next_y_offset = rhor2xy[angle][1];
-                if (speed == 0) next_x_offset = next_y_offset = 0;
-                if (next_x_offset == last_x_offset &&
-                    next_y_offset == last_y_offset) {
-                } else {
-                    last_x_offset = next_x_offset;
-                    last_y_offset = next_y_offset;
-                }
-                update_pos(&pos_info[human_0_camp], next_x_offset,
-                           next_y_offset, speed);
-            }
-
+        if (player[human_0_camp].tag >> 16) {
             static int cooldown = 0;
-            if (CROSS) {
+            static int human = 1;
+            if (Get_BOOT0()) {
+                human ^= 1;
+                delay_1ms(50);
+            }
+            if (!human) {
+                random_walk(human_0_camp);
                 if (cooldown <= 0) {
                     try_fire(human_0_camp);
                     cooldown = 20;
                 }
+                cooldown--;
+            } else {
+                u8 stick = input_data.byte[6];
+                u8 button = input_data.byte[5];
+
+                u8 angle = stick >> 3;
+
+                // LCD_ShowNum(40, 0, begin, 2, WHITE);
+                // LCD_ShowNum(80, 0, end, 2, WHITE);
+                // LCD_ShowNum(0, 32, count++, 5, WHITE);
+                if (angle >= 0 && angle <= 23) {
+
+                    int speed = stick & 0b111;
+                    int next_x_offset = rhor2xy[angle][0];
+                    int next_y_offset = rhor2xy[angle][1];
+                    if (speed == 0) next_x_offset = next_y_offset = 0;
+                    if (next_x_offset == last_x_offset &&
+                        next_y_offset == last_y_offset) {
+                    } else {
+                        last_x_offset = next_x_offset;
+                        last_y_offset = next_y_offset;
+                    }
+                    update_pos(&player[human_0_camp], next_x_offset,
+                               next_y_offset, speed);
+                }
+
+                if (CROSS) {
+                    if (cooldown <= 0) {
+                        try_fire(human_0_camp);
+                        cooldown = 20;
+                    }
+                }
+                cooldown--;
             }
-            cooldown--;
         }
-        {
+        if (player[human_0_camp ^ 1].tag >> 16) {
             random_walk(human_0_camp ^ 1);
 
             static int cooldown2 = 0;
@@ -490,7 +538,7 @@ int main(void) {
         render_bullet();
 
         int up_layer_camp;
-        if (pos_info[human_0_camp].ypos > pos_info[human_0_camp ^ 1].ypos) {
+        if (player[human_0_camp].ypos > player[human_0_camp ^ 1].ypos) {
             up_layer_camp = human_0_camp;
         } else {
             up_layer_camp = human_0_camp ^ 1;
@@ -499,8 +547,30 @@ int main(void) {
         draw_character(up_layer_camp);
         draw_character(up_layer_camp ^ 1);
 
-        clean_last_character(pos_info[human_0_camp]);
-        clean_last_character(pos_info[human_0_camp ^ 1]);
-        LCD_ShowNum(0, 0, get_fps(), 2, WHITE);
+        clean_last_character(player[human_0_camp]);
+        clean_last_character(player[human_0_camp ^ 1]);
+
+        int hp = player[human_0_camp].tag >> 16;
+        int shield = (player[human_0_camp].tag >> 8) & 0xff;
+        int mana = player[human_0_camp].tag & 0xff;
+        LCD_Fill(7, 1, 7 + hp - 1, 1, 60140);
+        LCD_Fill(7, 2, 7 + hp - 1, 2, 55719);
+        LCD_Fill(7, 3, 7 + hp - 1, 3, 41155);
+        LCD_Fill(7 + hp, 1, 26, 3, 27271);
+
+        LCD_Fill(7, 5, 7 + shield - 1, 5, 52857);
+        LCD_Fill(7, 6, 7 + shield - 1, 6, 38001);
+        LCD_Fill(7, 7, 7 + shield - 1, 7, 27371);
+        LCD_Fill(7 + shield, 5, 26, 7, 27271);
+
+        LCD_Fill(7, 9, 7 + mana - 1, 9, 25852);
+        LCD_Fill(7, 10, 7 + mana - 1, 10, 9079);
+        LCD_Fill(7, 11, 7 + mana - 1, 11, 4688);
+        LCD_Fill(7 + mana, 9, 26, 11, 27271);
+
+        // LCD_ShowNum(0, 0, get_fps(), 2, WHITE);
+        // LCD_ShowNum(0, 16, hp, 2, WHITE);
+        // LCD_ShowNum(0, 32, shield, 2, WHITE);
+        // LCD_ShowNum(0, 48, mana, 2, WHITE);
     }
 }
