@@ -81,6 +81,7 @@ typedef struct {
     int vx;
     int vy;
     int tag;
+    int tag2;
 } GameObject;
 
 void draw_init() {
@@ -89,6 +90,8 @@ void draw_init() {
     for (int i = 0; i < 15; i++) {
         ((int *)need_clear)[i * 160 / 8 / 4] = 0xc0000000;
         ((int *)is_painted)[i * 160 / 8 / 4] = 0x3fffffff;
+        ((int *)need_clear)[(i * 160 + 159) / 8 / 4] = 0x00000003;
+        ((int *)is_painted)[(i * 160 + 159) / 8 / 4] = 0xfffffffc;
     }
 }
 
@@ -274,8 +277,23 @@ int begin = 0, end = 0;
 
 int bullet_damage[2] = {5, 5};
 
+void shield_recharge(int target_player) {
+    int cd = player[target_player].tag2;
+    int hp = (player[target_player].tag >> 16) & 0xff;
+    int shield = (player[target_player].tag >> 8) & 0xff;
+    int mana = player[target_player].tag & 0xff;
+    cd--;
+    if (cd <= 0) {
+        cd = 30;
+        shield += 5;
+        if (shield > 20) shield = 20;
+    }
+    player[target_player].tag = (hp << 16) + (shield << 8) + mana;
+    player[target_player].tag2 = cd;
+}
+
 void deal_damage(int target_player, int bullet_type) {
-    int hp = player[target_player].tag >> 16;
+    int hp = (player[target_player].tag >> 16) & 0xff;
     int shield = (player[target_player].tag >> 8) & 0xff;
     int mana = player[target_player].tag & 0xff;
     shield -= bullet_damage[bullet_type];
@@ -285,6 +303,7 @@ void deal_damage(int target_player, int bullet_type) {
     }
     if (hp < 0) hp = 0;
     player[target_player].tag = (hp << 16) + (shield << 8) + mana;
+    player[target_player].tag2 = 60;
 }
 
 void render_bullet() {
@@ -421,6 +440,34 @@ void init_panel() {
     LCD_Address_Set(0, 0, 29, 14);
     for (int i = 0; i < 15; i++)
         for (int j = 0; j < 30; j++) LCD_WR_DATA(panel[i][j]);
+    LCD_Address_Set(130, 0, 159, 14);
+    for (int i = 0; i < 15; i++)
+        for (int j = 0; j < 30; j++) LCD_WR_DATA(panel[i][j]);
+}
+
+void update_panel(int camp) {
+    int hp = player[camp].tag >> 16;
+    int shield = (player[camp].tag >> 8) & 0xff;
+    int mana = player[camp].tag & 0xff;
+    int start;
+    if (camp == human_0_camp)
+        start = 7;
+    else
+        start = 137;
+    LCD_Fill(start, 1, start + hp - 1, 1, 60140);
+    LCD_Fill(start, 2, start + hp - 1, 2, 55719);
+    LCD_Fill(start, 3, start + hp - 1, 3, 41155);
+    LCD_Fill(start + hp, 1, start + 19, 3, 27271);
+
+    LCD_Fill(start, 5, start + shield - 1, 5, 52857);
+    LCD_Fill(start, 6, start + shield - 1, 6, 38001);
+    LCD_Fill(start, 7, start + shield - 1, 7, 27371);
+    LCD_Fill(start + shield, 5, start + 19, 7, 27271);
+
+    LCD_Fill(start, 9, start + mana - 1, 9, 25852);
+    LCD_Fill(start, 10, start + mana - 1, 10, 9079);
+    LCD_Fill(start, 11, start + mana - 1, 11, 4688);
+    LCD_Fill(start + mana, 9, start + 19, 11, 27271);
 }
 
 #define START (button & (1 << 0))
@@ -477,7 +524,7 @@ int main(void) {
             static int human = 1;
             if (Get_BOOT0()) {
                 human ^= 1;
-                delay_1ms(50);
+                delay_1ms(500);
             }
             if (!human) {
                 random_walk(human_0_camp);
@@ -533,7 +580,8 @@ int main(void) {
 
         draw_init();
 
-        // render_hit();
+        shield_recharge(human_0_camp);
+        shield_recharge(human_0_camp ^ 1);
 
         render_bullet();
 
@@ -550,23 +598,8 @@ int main(void) {
         clean_last_character(player[human_0_camp]);
         clean_last_character(player[human_0_camp ^ 1]);
 
-        int hp = player[human_0_camp].tag >> 16;
-        int shield = (player[human_0_camp].tag >> 8) & 0xff;
-        int mana = player[human_0_camp].tag & 0xff;
-        LCD_Fill(7, 1, 7 + hp - 1, 1, 60140);
-        LCD_Fill(7, 2, 7 + hp - 1, 2, 55719);
-        LCD_Fill(7, 3, 7 + hp - 1, 3, 41155);
-        LCD_Fill(7 + hp, 1, 26, 3, 27271);
-
-        LCD_Fill(7, 5, 7 + shield - 1, 5, 52857);
-        LCD_Fill(7, 6, 7 + shield - 1, 6, 38001);
-        LCD_Fill(7, 7, 7 + shield - 1, 7, 27371);
-        LCD_Fill(7 + shield, 5, 26, 7, 27271);
-
-        LCD_Fill(7, 9, 7 + mana - 1, 9, 25852);
-        LCD_Fill(7, 10, 7 + mana - 1, 10, 9079);
-        LCD_Fill(7, 11, 7 + mana - 1, 11, 4688);
-        LCD_Fill(7 + mana, 9, 26, 11, 27271);
+        update_panel(human_0_camp);
+        update_panel(human_0_camp ^ 1);
 
         // LCD_ShowNum(0, 0, get_fps(), 2, WHITE);
         // LCD_ShowNum(0, 16, hp, 2, WHITE);
