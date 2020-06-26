@@ -305,7 +305,7 @@ void init_map() {
     for (int x = 0; x < 160; x += 10)
         for (int y = 0; y < 80; y += 10) {
             xy2block[x / 10][y / 10] =
-                rand() % (sizeof(blocks) / (10 * 10 * sizeof(u16)));
+                rand() % 5;
             LCD_Address_Set(x, y, x + 9, y + 9);
             for (int i = 0; i < 10; i++)
                 for (int j = 0; j < 10; j++)
@@ -683,10 +683,5 @@ int main(void) {
 
         update_panel(human_0_camp);
         update_panel(human_0_camp ^ 1);
-
-        // LCD_ShowNum(0, 0, get_fps(), 2, WHITE);
-        // LCD_ShowNum(0, 16, hp, 2, WHITE);
-        // LCD_ShowNum(0, 32, shield, 2, WHITE);
-        // LCD_ShowNum(0, 48, mana, 2, WHITE);
     }
 }
