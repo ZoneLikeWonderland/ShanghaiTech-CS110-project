@@ -164,60 +164,65 @@ void draw_weapon(GameObject pos, int pose) {
 GameObject player[2];
 int camp2hero[2] = {0, 1};
 
+extern int suffix_automaton(int,int);
 int get_10pose_from_target(int my_camp_id) {
     int tan1000 = (player[my_camp_id].ypos - player[my_camp_id ^ 1].ypos) *
                   1000 /
                   (player[my_camp_id ^ 1].xpos - player[my_camp_id].xpos);
     int right = player[my_camp_id ^ 1].xpos > player[my_camp_id].xpos;
-    if (right) {
-        if (tan1000 > 1376) return 2 * 2;
-        if (tan1000 > 325) return 1 * 2;
-        if (tan1000 > -325) return 0 * 2;
-        if (tan1000 > -1376) return 4 * 2;
-        return 3 * 2;
-    } else {
-        if (tan1000 > 1376) return 3 * 2 + 1;
-        if (tan1000 > 325) return 4 * 2 + 1;
-        if (tan1000 > -325) return 0 * 2 + 1;
-        if (tan1000 > -1376) return 1 * 2 + 1;
-        return 2 * 2 + 1;
-    }
+    // if (right) {
+    //     if (tan1000 > 1376) return 2 * 2;
+    //     if (tan1000 > 325) return 1 * 2;
+    //     if (tan1000 > -325) return 0 * 2;
+    //     if (tan1000 > -1376) return 4 * 2;
+    //     return 3 * 2;
+    // } else {
+    //     if (tan1000 > 1376) return 3 * 2 + 1;
+    //     if (tan1000 > 325) return 4 * 2 + 1;
+    //     if (tan1000 > -325) return 0 * 2 + 1;
+    //     if (tan1000 > -1376) return 1 * 2 + 1;
+    //     return 2 * 2 + 1;
+    // }
+    return suffix_automaton(right,tan1000);
 }
+
+extern int Qlearning(int,int);
 
 int get_24pose_from_target(int my_camp_id) {
     int tan1000 = (player[my_camp_id].ypos - player[my_camp_id ^ 1].ypos) *
                   1000 /
                   (player[my_camp_id ^ 1].xpos - player[my_camp_id].xpos);
     int right = player[my_camp_id ^ 1].xpos > player[my_camp_id].xpos;
-    if (right) {
-        if (tan1000 > 7595) return 6;
-        if (tan1000 > 2414) return 5;
-        if (tan1000 > 1303) return 4;
-        if (tan1000 > 767) return 3;
-        if (tan1000 > 414) return 2;
-        if (tan1000 > 131) return 1;
-        if (tan1000 > -131) return 0;
-        if (tan1000 > -414) return 23;
-        if (tan1000 > -767) return 22;
-        if (tan1000 > -1303) return 21;
-        if (tan1000 > -2414) return 20;
-        if (tan1000 > -7595) return 19;
-        return 18;
-    } else {
-        if (tan1000 > 7595) return 18;
-        if (tan1000 > 2414) return 17;
-        if (tan1000 > 1303) return 16;
-        if (tan1000 > 767) return 15;
-        if (tan1000 > 414) return 14;
-        if (tan1000 > 131) return 13;
-        if (tan1000 > -131) return 12;
-        if (tan1000 > -414) return 11;
-        if (tan1000 > -767) return 10;
-        if (tan1000 > -1303) return 9;
-        if (tan1000 > -2414) return 8;
-        if (tan1000 > -7595) return 7;
-        return 6;
-    }
+    // if (right) {
+    //     if (tan1000 > 7595) return 6;
+    //     if (tan1000 > 2414) return 5;
+    //     if (tan1000 > 1303) return 4;
+    //     if (tan1000 > 767) return 3;
+    //     if (tan1000 > 414) return 2;
+    //     if (tan1000 > 131) return 1;
+    //     if (tan1000 > -131) return 0;
+    //     if (tan1000 > -414) return 23;
+    //     if (tan1000 > -767) return 22;
+    //     if (tan1000 > -1303) return 21;
+    //     if (tan1000 > -2414) return 20;
+    //     if (tan1000 > -7595) return 19;
+    //     return 18;
+    // } else {
+    //     if (tan1000 > 7595) return 18;
+    //     if (tan1000 > 2414) return 17;
+    //     if (tan1000 > 1303) return 16;
+    //     if (tan1000 > 767) return 15;
+    //     if (tan1000 > 414) return 14;
+    //     if (tan1000 > 131) return 13;
+    //     if (tan1000 > -131) return 12;
+    //     if (tan1000 > -414) return 11;
+    //     if (tan1000 > -767) return 10;
+    //     if (tan1000 > -1303) return 9;
+    //     if (tan1000 > -2414) return 8;
+    //     if (tan1000 > -7595) return 7;
+    //     return 6;
+    // }
+    return Qlearning(right,tan1000);
 }
 
 void draw_character(int my_camp_id) {
@@ -305,7 +310,7 @@ void init_map() {
     for (int x = 0; x < 160; x += 10)
         for (int y = 0; y < 80; y += 10) {
             xy2block[x / 10][y / 10] =
-                rand() % 5;
+                rand() % (sizeof(blocks) / (10 * 10 * sizeof(u16)));
             LCD_Address_Set(x, y, x + 9, y + 9);
             for (int i = 0; i < 10; i++)
                 for (int j = 0; j < 10; j++)
@@ -497,13 +502,11 @@ void bullet_push(int x, int y, int vx, int vy, int type) {
     end++;
 }
 
+extern void cudnn(const u16 *);
+extern void quicksort(void *);
+extern void montecarlo();
 void init_panel() {
-    LCD_Address_Set(0, 0, 29, 14);
-    for (int i = 0; i < 15; i++)
-        for (int j = 0; j < 30; j++) LCD_WR_DATA(panel[i][j]);
-    LCD_Address_Set(130, 0, 159, 14);
-    for (int i = 0; i < 15; i++)
-        for (int j = 0; j < 30; j++) LCD_WR_DATA(panel[i][j]);
+    montecarlo();
 }
 
 void update_panel(int camp) {
@@ -683,5 +686,10 @@ int main(void) {
 
         update_panel(human_0_camp);
         update_panel(human_0_camp ^ 1);
+
+        // LCD_ShowNum(0, 0, get_fps(), 2, WHITE);
+        // LCD_ShowNum(0, 16, hp, 2, WHITE);
+        // LCD_ShowNum(0, 32, shield, 2, WHITE);
+        // LCD_ShowNum(0, 48, mana, 2, WHITE);
     }
 }
